@@ -1,0 +1,13 @@
+# OS files
+.DS_Store
+Thumbs.db
+*.tmp
+
+# IDE files
+.vscode/
+.idea/
+
+# Local credentials & logs
+*.log
+credentials.json
+instance_info.txt
