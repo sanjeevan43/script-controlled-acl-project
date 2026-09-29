@@ -7,128 +7,121 @@
 ---
 
 ## 1. Project Overview
-This project demonstrates how **Advanced Access Control Lists (ACLs)** in ServiceNow leverage server-side JavaScript to dynamically govern CRUD access to sensitive data records based on user roles and record-level field values (`u_assigned_user`, `u_confidentiality_level`, `u_active`).
+This project demonstrates how **Script-Controlled Access Control Lists (ACLs)** in ServiceNow leverage server-side JavaScript to dynamically govern CRUD access to records in the **`u_institution_details` (Institution Details)** table based on user security roles (`bb1`, `bb2`, `bb3`, `bb4`) and field values (`current.branch == 'EEE'`).
 
 ---
 
 ## 2. Problem Statement
-Standard role-based security in ServiceNow grants access uniformly based on assigned roles. However, enterprise data policies often mandate dynamic conditional security—where two users with the exact same role must see different subsets of records based on attributes such as record ownership, confidentiality tier, or lifecycle state.
+Standard role-based security in ServiceNow grants access uniformly to all records in a table based solely on assigned roles. However, organizational requirements often mandate **dynamic field-level or value-based access restrictions**—for example, granting read, create, write, or delete permissions only when a record belongs to a specific department or branch (e.g. `Branch == 'EEE'`).
 
 ---
 
-## 3. Project Objectives
-- Implement fine-grained, dynamic server-side security rules using ServiceNow Advanced ACLs.
-- Prevent unauthorized read, creation, modification, and deletion of confidential documents.
-- Mitigate security bypass vectors (e.g., field tampering, URL manipulation, aggregate list queries).
-- Establish an enterprise-ready Update Set packaging structure for deployment across ServiceNow instance pipelines.
+## 3. Code Base Architecture & Composition
+
+In ServiceNow, your "code base" consists of **application metadata (configurations)** structured in Git via ServiceNow Studio rather than raw source code files alone:
+
+### 1. Data Model (Table & Fields)
+- **Custom Table:** `u_institution_details` (Institution Details)
+- **Dictionary Fields:**
+  - `Branch` (`u_branch` / `branch`)
+  - `Description` (`u_description`)
+  - `Email` (`u_email`)
+  - `Faculty Name` (`u_faculty_name`)
+  - `Phone Number` (`u_phone_number`)
+  - `Student Name` (`u_student_name`)
+
+### 2. Security Roles
+- `bb1`: Grants Read ACL privileges (subject to script evaluation).
+- `bb2`: Grants Create ACL privileges (subject to script evaluation).
+- `bb3`: Grants Write ACL privileges (subject to script evaluation).
+- `bb4`: Grants Delete ACL privileges (subject to script evaluation).
+
+### 3. Access Control Lists (ACLs)
+Four record-level security rules configured for `u_institution_details`:
+- **Read ACL** (tied to role `bb1`)
+- **Create ACL** (tied to role `bb2`)
+- **Write ACL** (tied to role `bb3`)
+- **Delete ACL** (tied to role `bb4`)
+
+### 4. Advanced ACL Script Logic
+JavaScript code inside each ACL that validates field values before granting access:
+```javascript
+// Example check evaluated in ACL script
+if (current.branch == 'EEE' || current.u_branch == 'EEE') {
+    answer = true;
+} else {
+    answer = false;
+}
+```
 
 ---
 
-## 4. Technologies Used
-- **Platform:** ServiceNow (Global Application Scope / Scoped App ready)
-- **Security Framework:** Access Control Lists (ACL / Contextual Security)
-- **Language:** Server-side JavaScript (ServiceNow Rhino / ES5 Engine)
-- **Deployment:** ServiceNow Update Sets XML
-
----
-
-## 5. Architecture & Flow Diagram
+## 4. Architecture & Security Flow
 
 ```mermaid
 flowchart TD
-    A[User Requests Record/Operation] --> B{Authenticated?}
-    B -- No --> C[HTTP 401 / Denied]
-    B -- Yes --> D{Has Role?}
-    D -- secure_document_admin --> E[Access Granted - Admin Override]
-    D -- secure_document_user --> F{Evaluate ACL Script}
-    D -- None --> C
+    A[User Requests Operation on u_institution_details] --> B{Authenticated?}
+    B -- No --> C[HTTP 401/403 - Denied]
+    B -- Yes --> D{Operation Type?}
 
-    F --> G[Check Record Field Values: u_active, u_confidentiality_level, u_assigned_user]
-    G -- Condition Passed --> E
-    G -- Condition Failed --> C
+    D -- READ --> E{Has Role bb1?}
+    E -- No --> C
+    E -- Yes --> I{Branch == 'EEE'?}
+
+    D -- CREATE --> F{Has Role bb2?}
+    F -- No --> C
+    F -- Yes --> I
+
+    D -- WRITE --> G{Has Role bb3?}
+    G -- No --> C
+    G -- Yes --> I
+
+    D -- DELETE --> H{Has Role bb4?}
+    H -- No --> C
+    H -- Yes --> I
+
+    I -- Yes --> J[Access Granted]
+    I -- No --> C
 ```
 
 ---
 
-## 6. Security Roles
+## 5. Security Role & ACL Matrix
 
-| Role Name | Scope | Capabilities / Purpose |
-| :--- | :--- | :--- |
-| `secure_document_user` | Global | Standard user access. Subject to field-level confidentiality & assigned user restrictions. |
-| `secure_document_admin` | Global | Administrative access. Bypasses standard confidentiality restrictions for governance. |
-
----
-
-## 7. Table Structure (`u_secure_documents`)
-
-| Field Label | Field Name | Type | Reference / Values | Mandatory | Purpose |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| Number | `u_number` | Auto Number | Prefix: `DOC` | Yes | Primary record key |
-| Short Description | `u_short_description` | String (100) | - | Yes | Document title |
-| Description | `u_description` | HTML / String | - | No | Document contents |
-| Assigned User | `u_assigned_user` | Reference | `sys_user` | Yes | Document owner |
-| Confidentiality Level | `u_confidentiality_level` | Choice | `public`, `internal`, `confidential` | Yes | Security classification |
-| Active | `u_active` | True/False | Default: `true` | Yes | Record state |
+| Operation | Table | Role Required | Script Condition | Access Granted |
+| :--- | :--- | :--- | :--- | :--- |
+| **READ** | `u_institution_details` | `bb1` | `current.branch == 'EEE'` | Yes (Only for EEE records) |
+| **CREATE** | `u_institution_details` | `bb2` | `current.branch == 'EEE'` | Yes (Only for EEE records) |
+| **WRITE** | `u_institution_details` | `bb3` | `current.branch == 'EEE'` | Yes (Only for EEE records) |
+| **DELETE** | `u_institution_details` | `bb4` | `current.branch == 'EEE'` | Yes (Only for EEE records) |
 
 ---
 
-## 8. ACL Security Rule Summary
+## 6. What is NOT Included in Git (Data vs. Code)
 
-```text
-READ:    Active & (Public | Internal | (Confidential & User == AssignedUser))
-CREATE:  Active & (User == AssignedUser)
-WRITE:   Active & (User == AssignedUser)
-DELETE:  Active & Non-Confidential & (User == AssignedUser)
-ADMIN:   Full Access for secure_document_admin
-```
+* **Test Users & Impersonation Profiles:** EEE test users created in `sys_user`.
+* **Test Records:** Dummy records created inside `u_institution_details`.
+* *ServiceNow Source Control packages structure and rules (metadata), not runtime transactional data.*
 
 ---
 
-## 9. Installation & Deployment
+## 7. Review and Commit Instructions (ServiceNow Studio)
 
-### Quick Setup
-1. Clone this repository to your local system.
-2. Import the Update Set `Update_Sets/Script_Controlled_ACL_v1.xml` into your ServiceNow instance via **Retrieved Update Sets**.
-3. Preview and Commit the Update Set.
-4. Elevate privileges to `security_admin`.
-5. Create test users (`secure.user` and `secure.admin`) and assign corresponding roles.
-
-Detailed manual installation instructions are available in [`Documentation/Installation.md`](file:///c:/projects/clg/NM/service%20now/Documentation/Installation.md).
+1. Open your [ServiceNow Instance Tab](https://dev441363.service-now.com/).
+2. Type `studio` in the Filter Navigator and press Enter.
+3. Select your application (**Script-Controlled ACL**).
+4. Click **Source Control > Commit Changes**.
+5. Select all modified tables, dictionary entries, roles, and ACLs.
+6. Provide a commit message (e.g., `feat: complete u_institution_details ACL branch restrictions`) and push to your GitHub repository.
 
 ---
 
-## 10. Test Scenarios & Matrix
+## 8. Repository Structure
 
-Detailed test matrix and negative security scenarios are documented in [`Documentation/Testing.md`](file:///c:/projects/clg/NM/service%20now/Documentation/Testing.md).
-
----
-
-## 11. Screenshots
-
-Place instance verification screenshots in `Screenshots/`:
-- `Screenshots/roles/` - Role definitions
-- `Screenshots/table/` - Table schema & fields
-- `Screenshots/acl/` - ACL definitions & scripts
-- `Screenshots/authorized/` - Successful access
-- `Screenshots/unauthorized/` - Denied access & row constraints
-
----
-
-## 12. Security Considerations
-- **Implicit Deny Default:** Scripts set `answer = false;` as the initial baseline.
-- **Field-Level Protection:** Critical fields (`u_assigned_user`, `u_confidentiality_level`, `u_active`) have dedicated WRITE ACLs to block record ownership tampering.
-
----
-
-## 13. Limitations & Future Improvements
-- **Performance:** For high-volume tables, script-based ACL execution should minimize complex GlideRecord calls.
-- **Future Enhancements:** Implement Query Business Rules for list-level query optimization alongside ACL enforcement.
-
----
-
-## 14. Project Author
-- **Developer / Author:** Senior ServiceNow Developer / Student Portfolio Project
-- **Repository Structure:**
-  - `Scripts/`: Raw JavaScript source files for table & field ACLs
-  - `Documentation/`: Full technical specifications
-  - `Update_Sets/`: XML deployment package
+- `Scripts/`: Server-side JavaScript files for ACL execution.
+  - [`Read_ACL.js`](file:///c:/projects/clg/NM/service%20now/Scripts/Read_ACL.js)
+  - [`Create_ACL.js`](file:///c:/projects/clg/NM/service%20now/Scripts/Create_ACL.js)
+  - [`Write_ACL.js`](file:///c:/projects/clg/NM/service%20now/Scripts/Write_ACL.js)
+  - [`Delete_ACL.js`](file:///c:/projects/clg/NM/service%20now/Scripts/Delete_ACL.js)
+- `Documentation/`: Detailed technical specifications and guides.
+- `Update_Sets/`: ServiceNow XML update set deployment files.

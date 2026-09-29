@@ -1,51 +1,39 @@
 /**
  * ServiceNow Advanced Record-Level CREATE ACL Script
- * Table: u_secure_documents (Secure Documents)
+ * Project: Script-Controlled ACL – Restrict Record Access Based on Field Value
+ * Table: u_institution_details (Institution Details)
  * Operation: create
+ * Role Required: bb2
  * 
  * Policy:
- * 1. Admin (secure_document_admin): Can create any document with any valid field configuration.
- * 2. Normal User (secure_document_user):
- *    - Can create documents only if assigned user is set to themselves (or unassigned/draft default).
- *    - Record must be created as active.
- *    - Cannot create confidential documents directly unless assigned to themselves.
+ * Grants record creation access on u_institution_details table ONLY IF:
+ * 1. The user possesses the 'bb2' security role.
+ * 2. The record's Branch field value equals 'EEE' (current.branch == 'EEE' or current.u_branch == 'EEE').
  */
 (function executeRule(current, previous /*null when async*/) {
 
     // Default deny access
     answer = false;
 
-    // Check 1: Admin override
-    if (gs.hasRole('secure_document_admin')) {
-        answer = true;
+    // Check 1: User must possess the 'bb2' role
+    if (!gs.hasRole('bb2')) {
+        answer = false;
         return;
     }
 
-    // Check 2: Normal user validation
-    if (gs.hasRole('secure_document_user')) {
-        var currentUserID = gs.getUserID();
-        var assignedUserID = current.u_assigned_user ? current.u_assigned_user.toString() : '';
-        var confidentiality = current.u_confidentiality_level ? current.u_confidentiality_level.toString() : '';
+    // Check 2: Evaluate field value (Branch == 'EEE')
+    var branchValue = '';
+    if (current.u_branch) {
+        branchValue = current.u_branch.toString();
+    } else if (current.branch) {
+        branchValue = current.branch.toString();
+    }
 
-        // Must create as active
-        if (current.u_active === false) {
-            answer = false;
-            return;
-        }
-
-        // Assigned user must be current user (or default self)
-        if (assignedUserID !== '' && assignedUserID !== currentUserID) {
-            answer = false; // Cannot create document assigned to someone else
-            return;
-        }
-
-        // Non-admin creating confidential record must be assigned to self
-        if (confidentiality === 'confidential' && assignedUserID !== currentUserID) {
-            answer = false;
-            return;
-        }
-
+    if (branchValue === 'EEE') {
         answer = true;
+    } else {
+        answer = false;
     }
 
 })(current, previous);
+

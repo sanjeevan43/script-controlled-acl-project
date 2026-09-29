@@ -1,50 +1,21 @@
-# Testing Procedures & Verification Matrix
+# Test Matrix & Verification Scenarios
 
-## Test Data Setup
-Create the following test records in `u_secure_documents` as Administrator:
+## Test Environment Setup
+- Create test records in `u_institution_details`:
+  - Record 1: `Branch` = `EEE`, `Student Name` = `John Doe`, `Faculty Name` = `Dr. Smith`
+  - Record 2: `Branch` = `CSE`, `Student Name` = `Jane Alice`, `Faculty Name` = `Dr. Brown`
+- Impersonate test user with specified role (`bb1`, `bb2`, `bb3`, or `bb4`).
 
-| Record # | Short Description | Confidentiality Level | Assigned User | Active |
-| :--- | :--- | :--- | :--- | :--- |
-| **DOC0001** | Public Document | `public` | `secure.user` | `true` |
-| **DOC0002** | Internal Document | `internal` | `secure.user` | `true` |
-| **DOC0003** | Confidential Self | `confidential` | `secure.user` | `true` |
-| **DOC0004** | Confidential Other | `confidential` | `secure.admin` | `true` |
-| **DOC0005** | Inactive Document | `public` | `secure.user` | `false` |
+## Test Scenarios Matrix
 
----
-
-## Testing Matrix & Expected Results
-
-| User | Target Record | Operation | Expected Outcome | Technical Rationale |
-| :--- | :--- | :--- | :--- | :--- |
-| `secure.user` | DOC0001 (Public) | **READ** | **ALLOW** | Active document, public confidentiality level. |
-| `secure.user` | DOC0002 (Internal) | **READ** | **ALLOW** | Active document, internal confidentiality level. |
-| `secure.user` | DOC0003 (Confidential Self) | **READ** | **ALLOW** | Active document, confidential level MATCHES assigned user (`secure.user`). |
-| `secure.user` | DOC0004 (Confidential Other)| **READ** | **DENY** | Confidential document assigned to `secure.admin`. User is blocked by READ ACL. |
-| `secure.user` | DOC0005 (Inactive) | **READ** | **DENY** | Inactive document. Standard users cannot read inactive documents. |
-| `secure.user` | New Record (Self Assigned) | **CREATE** | **ALLOW** | Creating active document assigned to self. |
-| `secure.user` | New Record (Assigned to Admin)| **CREATE** | **DENY** | CREATE ACL blocks assigning record to another user during insertion. |
-| `secure.user` | DOC0001 (Public Self) | **WRITE** | **ALLOW** | Record is active and assigned to `secure.user`. |
-| `secure.user` | DOC0004 (Confidential Other)| **WRITE** | **DENY** | Not assigned user. |
-| `secure.user` | DOC0005 (Inactive) | **WRITE** | **DENY** | Inactive record write restriction. |
-| `secure.user` | DOC0001 (Public Self) | **DELETE** | **ALLOW** | Active, self-assigned, non-confidential. |
-| `secure.user` | DOC0003 (Confidential Self)| **DELETE** | **DENY** | DELETE ACL restricts deletion of Confidential records to Admin only. |
-| `secure.admin`| Any Record | **ALL** | **ALLOW** | `secure_document_admin` role triggers immediate admin override (`answer = true`). |
-
----
-
-## Negative Security Tests
-
-### Test 1: Direct URL Access (Confidential Other)
-- **Step:** Log in / impersonate `secure.user`.
-- **Action:** Open URL `https://<instance>.service-now.com/u_secure_documents.do?sys_id=<SYS_ID_OF_DOC0004>`.
-- **Expected Result:** Security error message: *"Record not found or access denied"*.
-
-### Test 2: List Security & Aggregate Security
-- **Step:** Impersonate `secure.user` and navigate to `u_secure_documents_list.do`.
-- **Expected Result:** DOC0004 and DOC0005 are completely excluded from list view. A message `"Number of rows removed by Security Constraints: X"` appears at bottom of list.
-
-### Test 3: Field Tampering Attack (Reassignment)
-- **Step:** Impersonate `secure.user`, open DOC0001.
-- **Action:** Attempt to edit `Assigned User` field to `secure.admin`.
-- **Expected Result:** Field is read-only due to `u_secure_documents.u_assigned_user` WRITE ACL.
+| Scenario # | User Role | Record Branch | Attempted Operation | Expected Result | Pass/Fail Criteria |
+| :--- | :--- | :--- | :--- | :--- | :--- |
+| **TC-01** | `bb1` | `EEE` | READ | **ALLOWED** | Record is visible in list/form view |
+| **TC-02** | `bb1` | `CSE` | READ | **DENIED** | Record is hidden / security restricted |
+| **TC-03** | `bb2` | `EEE` | CREATE | **ALLOWED** | Record inserted successfully |
+| **TC-04** | `bb2` | `CSE` | CREATE | **DENIED** | Form submit blocked by security rules |
+| **TC-05** | `bb3` | `EEE` | WRITE | **ALLOWED** | Fields edited and saved successfully |
+| **TC-06** | `bb3` | `CSE` | WRITE | **DENIED** | Fields are read-only / save rejected |
+| **TC-07** | `bb4` | `EEE` | DELETE | **ALLOWED** | Delete button enabled; record deleted |
+| **TC-08** | `bb4` | `CSE` | DELETE | **DENIED** | Delete button hidden / operation forbidden |
+| **TC-09** | None | `EEE` | READ / WRITE | **DENIED** | Complete access denied |

@@ -1,53 +1,39 @@
 /**
  * ServiceNow Advanced Record-Level DELETE ACL Script
- * Table: u_secure_documents (Secure Documents)
+ * Project: Script-Controlled ACL – Restrict Record Access Based on Field Value
+ * Table: u_institution_details (Institution Details)
  * Operation: delete
+ * Role Required: bb4
  * 
  * Policy:
- * 1. Admin (secure_document_admin): Can delete any record.
- * 2. Normal User (secure_document_user):
- *    - Can delete active, non-confidential records assigned to themselves.
- *    - Cannot delete confidential records (requires admin).
- *    - Cannot delete inactive records (archived / protected).
- *    - Cannot delete records assigned to other users.
+ * Grants deletion access on u_institution_details table records ONLY IF:
+ * 1. The user possesses the 'bb4' security role.
+ * 2. The record's Branch field value equals 'EEE' (current.branch == 'EEE' or current.u_branch == 'EEE').
  */
 (function executeRule(current, previous /*null when async*/) {
 
-    // Default deny
+    // Default deny access
     answer = false;
 
-    // Check 1: Admin override
-    if (gs.hasRole('secure_document_admin')) {
-        answer = true;
+    // Check 1: User must possess the 'bb4' role
+    if (!gs.hasRole('bb4')) {
+        answer = false;
         return;
     }
 
-    // Check 2: Normal user validation
-    if (gs.hasRole('secure_document_user')) {
-        // Must be active
-        if (!current.u_active) {
-            answer = false;
-            return;
-        }
+    // Check 2: Evaluate field value (Branch == 'EEE')
+    var branchValue = '';
+    if (current.u_branch) {
+        branchValue = current.u_branch.toString();
+    } else if (current.branch) {
+        branchValue = current.branch.toString();
+    }
 
-        var currentUserID = gs.getUserID();
-        var assignedUserID = current.u_assigned_user ? current.u_assigned_user.toString() : '';
-        var confidentiality = current.u_confidentiality_level ? current.u_confidentiality_level.toString() : '';
-
-        // Must be assigned user
-        if (assignedUserID !== currentUserID) {
-            answer = false;
-            return;
-        }
-
-        // Confidential documents cannot be deleted by normal users
-        if (confidentiality === 'confidential') {
-            answer = false;
-            return;
-        }
-
-        // Access allowed for active, self-assigned, public/internal records
+    if (branchValue === 'EEE') {
         answer = true;
+    } else {
+        answer = false;
     }
 
 })(current, previous);
+

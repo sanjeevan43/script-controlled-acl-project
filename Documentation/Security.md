@@ -1,23 +1,24 @@
-# Security Architecture & Best Practices
+# Security Policy & Execution Principles
 
-## Table-Level vs Field-Level ACLs
-- **Table-Level ACL (`u_secure_documents` | `None`):** Evaluated first when accessing records or querying lists. If table-level READ access fails, the user cannot see the record or any of its fields.
-- **Field-Level ACL (`u_secure_documents.*` or `u_secure_documents.u_field`):** Evaluated after table-level access is granted. Controls visibility and editability of specific columns on form/list views.
+## Core Principles
 
-## ACL Evaluation Hierarchy
-For a user to gain access in ServiceNow, **ALL THREE** of the following conditions must be met:
-1. **Role Check:** User possesses required role(s) specified in the ACL record.
-2. **Condition Builder:** Standard ServiceNow conditions evaluate to true.
-3. **Script Evaluation:** Server-side script executes and sets `answer = true`.
+1. **Default Deny Strategy:**
+   All ACL scripts explicitly begin with `answer = false;`. Access is granted only when all conditions (role check and `Branch == 'EEE'` logic) pass.
 
-If ANY of the three checks evaluate to false, access is DENIED (`answer = false`).
+2. **Role Isolation:**
+   - `bb1`: Restricted to Read operation evaluation.
+   - `bb2`: Restricted to Create operation evaluation.
+   - `bb3`: Restricted to Write operation evaluation.
+   - `bb4`: Restricted to Delete operation evaluation.
 
-## Defense-in-Depth Against Bypasses
-1. **Record Modification vs Security Field Escalation:**
-   Without Field-Level WRITE ACLs, a normal user could edit `u_assigned_user` to another user or change `u_confidentiality_level` from `confidential` to `public` before saving, effectively bypassing record-level security constraints. Field-level WRITE ACLs lock critical security-governing fields after creation.
-2. **Implicit Deny Principle:**
-   ACL scripts initialize `answer = false;` explicitly at the start of execution. Access is granted only when affirmative conditions evaluate cleanly.
+3. **Field Value Enforcement:**
+   Record access dynamically checks the `branch` / `u_branch` field value at evaluation time:
+   ```javascript
+   var branchValue = current.u_branch ? current.u_branch.toString() : (current.branch ? current.branch.toString() : '');
+   if (branchValue === 'EEE') {
+       answer = true;
+   }
+   ```
 
-## Admin Role Overrides
-- ServiceNow system administrators (`admin` role) have `Elevated Privilege` capability.
-- In ACL design, explicitly checking `gs.hasRole('secure_document_admin')` ensures administrative governance without relying solely on global `admin` privileges.
+4. **ServiceNow Studio Metadata Packaging:**
+   All security components (ACLs, Roles, Dictionary Entries) are packaged in Application Metadata and versioned in Git via ServiceNow Studio.
